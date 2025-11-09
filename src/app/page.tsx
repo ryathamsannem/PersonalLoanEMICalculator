@@ -1,5 +1,6 @@
 // src/app/page.tsx
 "use client";
+export const dynamic = "force-dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { computeEmi, inr, round2 } from "@/lib/emi";
 import SliderRow from "@/components/SliderRow";
