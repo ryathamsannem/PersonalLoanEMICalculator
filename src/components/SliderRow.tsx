@@ -7,32 +7,35 @@ export default function SliderRow(props: {
   min: number; max: number; step?: number;
   value: number; onChange: (v: number) => void;
   prefix?: string; suffix?: string;
-  widthPx?: number;               // optional: slider width hint
 }) {
   const id = useId();
-  const {
-    label, min, max, step = 1, value, onChange,
-    prefix = "", suffix = "", widthPx
-  } = props;
+  const { label, min, max, step = 1, value, onChange, prefix = "", suffix = "" } = props;
 
-  const clamp = (n: number) => Math.min(max, Math.max(min, isFinite(n) ? n : min));
+  const clamp = (n: number) => {
+    const v = Number.isFinite(n) ? n : min;
+    return Math.min(max, Math.max(min, v));
+  };
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label htmlFor={id} className="text-sm text-gray-700 font-medium">{label}</label>
+        <label htmlFor={id} className="text-sm font-medium text-gray-800">{label}</label>
         <div className="flex items-center gap-2">
-          {prefix && <span className="text-gray-500 text-sm">{prefix}</span>}
+          {prefix && <span className="text-gray-600 text-sm">{prefix}</span>}
           <input
+            id={`${id}-num`}
             type="number"
+            inputMode="decimal"
+            pattern="[0-9]*"
             value={Number.isFinite(value) ? value : min}
             onChange={(e) => onChange(clamp(Number(e.target.value)))}
             step={step}
-            min={min} max={max}
-            className="w-28 rounded-md border border-gray-300 bg-white px-2 py-1 text-right text-sm
-                       focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            min={min}
+            max={max}
+            className="w-32 rounded-md border border-gray-300 bg-white px-2 py-1 text-right text-sm
+                       text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
-          {suffix && <span className="text-gray-500 text-sm">{suffix}</span>}
+          {suffix && <span className="text-gray-600 text-sm">{suffix}</span>}
         </div>
       </div>
 
@@ -45,7 +48,6 @@ export default function SliderRow(props: {
         value={value}
         onChange={(e) => onChange(clamp(Number(e.target.value)))}
         className="w-full accent-emerald-600"
-        style={widthPx ? { width: widthPx } : undefined}
       />
     </div>
   );

@@ -167,8 +167,8 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-xl font-semibold tabular-nums">{value}</div>
+      <div className="text-xs text-gray-700">{label}</div>
+      <div className="text-2xl font-semibold tabular-nums text-gray-900">{value}</div>
     </div>
   );
 }
