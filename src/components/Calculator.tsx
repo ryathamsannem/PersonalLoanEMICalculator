@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
   useTransition,
-  useEffect, // for BoxInput sync
+  useEffect,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SliderRow from "@/components/SliderRow";
@@ -26,78 +26,124 @@ export default function Calculator() {
   const DEFAULT_RATE = 9.99;
   const DEFAULT_YEARS = 5;
   const DEFAULT_MONTHS = DEFAULT_YEARS * 12;
-  const DEFAULT_START = todayISO(); // current year/month, 07th
+  const DEFAULT_START = todayISO(); // ⬅️ current date
 
   // ---------- committed values (used for calculation & URL) ----------
-  const [amount, setAmount]   = useState<number>(Number(params.get("amount")  ?? DEFAULT_AMOUNT));
-  const [rate, setRate]       = useState<number>(Number(params.get("rate")    ?? DEFAULT_RATE));
-  const [months, setMonths]   = useState<number>(Number(params.get("months")  ?? DEFAULT_MONTHS));
-
-  // default to "years" unless the URL explicitly says months
-  const [modeTenure, setModeTenure] =
-    useState<"months"|"years">(params.get("mode")==="months" ? "months" : "years");
-
-  const [startDate, setStartDate]   =
-    useState<string>(params.get("start") ?? DEFAULT_START);
+  const [amount, setAmount] = useState<number>(
+    Number(params.get("amount") ?? DEFAULT_AMOUNT)
+  );
+  const [rate, setRate] = useState<number>(
+    Number(params.get("rate") ?? DEFAULT_RATE)
+  );
+  const [months, setMonths] = useState<number>(
+    Number(params.get("months") ?? DEFAULT_MONTHS)
+  );
+  // default to "years" unless URL explicitly says months
+  const [modeTenure, setModeTenure] = useState<"months" | "years">(
+    params.get("mode") === "months" ? "months" : "years"
+  );
+  const [startDate, setStartDate] = useState<string>(
+    params.get("start") ?? DEFAULT_START
+  );
 
   // ---------- draft values (edited live; committed on "Calculate") ----------
   const [dAmount, setDAmount] = useState(amount);
-  const [dRate, setDRate]     = useState(rate);
+  const [dRate, setDRate] = useState(rate);
   const [dMonths, setDMonths] = useState(months);
-  const [dMode, setDMode]     = useState<"months"|"years">(modeTenure);
-  const [dStart, setDStart]   = useState<string>(startDate);
+  const [dMode, setDMode] = useState<"months" | "years">(modeTenure);
+  const [dStart, setDStart] = useState<string>(startDate);
 
   // ---------- URL sync (only when user presses Calculate) ----------
-  const debRef = useRef<ReturnType<typeof setTimeout>|null>(null);
-  const pushUrl = useCallback((v: {
-    amount:number; rate:number; months:number; mode:"months"|"years"; start:string
-  })=>{
-    const map = new Map(params.entries());
-    map.set("amount", String(v.amount));
-    map.set("rate",   String(v.rate));
-    map.set("months", String(v.months));
-    map.set("mode",   v.mode);
-    map.set("start",  v.start);
-    const sp = new URLSearchParams(map as any);
-    if (debRef.current) clearTimeout(debRef.current);
-    debRef.current = setTimeout(()=>{
-      startTransition(()=>router.replace(`/?${sp.toString()}`));
-    }, 150);
-  },[params, router, startTransition]);
+  const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushUrl = useCallback(
+    (v: {
+      amount: number;
+      rate: number;
+      months: number;
+      mode: "months" | "years";
+      start: string;
+    }) => {
+      const map = new Map(params.entries());
+      map.set("amount", String(v.amount));
+      map.set("rate", String(v.rate));
+      map.set("months", String(v.months));
+      map.set("mode", v.mode);
+      map.set("start", v.start);
+      const sp = new URLSearchParams(map as any);
+      if (debRef.current) clearTimeout(debRef.current);
+      debRef.current = setTimeout(() => {
+        startTransition(() => router.replace(`/?${sp.toString()}`));
+      }, 150);
+    },
+    [params, router, startTransition]
+  );
 
   // ---------- Calculate: commit drafts -> compute + update URL ----------
   const onCalculate = () => {
-    const commitMonths = dMode==="years" ? Math.round(Number(dMonths)*12) : Math.round(Number(dMonths));
+    const commitMonths =
+      dMode === "years"
+        ? Math.round(Number(dMonths) * 12)
+        : Math.round(Number(dMonths));
     setAmount(Number(dAmount));
     setRate(Number(dRate));
     setMonths(commitMonths);
     setModeTenure(dMode);
     setStartDate(dStart);
-    pushUrl({ amount:Number(dAmount), rate:Number(dRate), months:commitMonths, mode:dMode, start:dStart });
+    pushUrl({
+      amount: Number(dAmount),
+      rate: Number(dRate),
+      months: commitMonths,
+      mode: dMode,
+      start: dStart,
+    });
   };
 
   // ---------- EMI computation for committed values ----------
-  const out = useMemo(()=>computeEmi({
-    principal: amount, annualRatePct: rate, tenureMonths: months
-  }), [amount, rate, months]);
+  const out = useMemo(
+    () =>
+      computeEmi({
+        principal: amount,
+        annualRatePct: rate,
+        tenureMonths: months,
+      }),
+    [amount, rate, months]
+  );
 
   // ---------- table data (full schedule) ----------
-  const monthlyRows = useMemo(()=>attachDates(out.breakdown, startDate), [out.breakdown, startDate]);
-  const yearlyRows  = useMemo(()=>groupByYear(monthlyRows), [monthlyRows]);
-  const [tableMode, setTableMode] = useState<"monthly"|"yearly">("monthly");
+  const monthlyRows = useMemo(
+    () => attachDates(out.breakdown, startDate),
+    [out.breakdown, startDate]
+  );
+  const yearlyRows = useMemo(() => groupByYear(monthlyRows), [monthlyRows]);
+  const [tableMode, setTableMode] = useState<"monthly" | "yearly">("monthly");
 
   // ---------- exporters ----------
   const exportCSV = () => {
-    const head = tableMode==="monthly"
-      ? ["Date","Month","Principal","Interest","Balance"]
-      : ["Year","Principal","Interest","Balance End"];
-    const rows = tableMode==="monthly"
-      ? monthlyRows.map(r => [r.date, r.month, fmtIN(r.principal), fmtIN(r.interest), fmtIN(r.balance)])
-      : yearlyRows.map(y => [y.year, fmtIN(y.principal), fmtIN(y.interest), fmtIN(y.balance)]);
-    const csv = [head, ...rows].map(r=>r.join(",")).join("\n");
-    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const head =
+      tableMode === "monthly"
+        ? ["Date", "Month", "Principal", "Interest", "Balance"]
+        : ["Year", "Principal", "Interest", "Balance End"];
+    const rows =
+      tableMode === "monthly"
+        ? monthlyRows.map((r) => [
+            r.date,
+            r.month,
+            fmtIN(r.principal),
+            fmtIN(r.interest),
+            fmtIN(r.balance),
+          ])
+        : yearlyRows.map((y) => [
+            y.year,
+            fmtIN(y.principal),
+            fmtIN(y.interest),
+            fmtIN(y.balance),
+          ]);
+    const csv = [head, ...rows].map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = `amortization_${tableMode}.csv`; a.click();
+    a.href = URL.createObjectURL(blob);
+    a.download = `amortization_${tableMode}.csv`;
+    a.click();
     URL.revokeObjectURL(a.href);
   };
 
@@ -106,24 +152,44 @@ export default function Calculator() {
       const { jsPDF } = await import("jspdf");
       // @ts-ignore
       const autoTable = (await import("jspdf-autotable")).default;
-      const doc = new jsPDF({ unit:"pt", format:"a4" });
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
 
-      doc.setFont("helvetica","");
+      doc.setFont("helvetica", "");
       doc.setFontSize(14);
       doc.text("Personal Loan Amortization", 40, 40);
       doc.setFontSize(11);
       doc.text(
         `Amount: ${fmtIN(amount)} INR  |  Rate: ${rate}%  |  Tenure: ${months} months  |  Start: ${startDate}`,
-        40, 60
+        40,
+        60
       );
 
-      const head = tableMode==="monthly"
-        ? [["Date","Month","Principal (INR)","Interest (INR)","Balance (INR)"]]
-        : [["Year","Principal (INR)","Interest (INR)","Balance End (INR)"]];
-      const body = (tableMode==="monthly"
-        ? monthlyRows.map(r=>[r.date, String(r.month), fmtIN(r.principal), fmtIN(r.interest), fmtIN(r.balance)])
-        : yearlyRows.map(y=>[String(y.year), fmtIN(y.principal), fmtIN(y.interest), fmtIN(y.balance)])
-      ) as any[];
+      const head =
+        tableMode === "monthly"
+          ? [
+              [
+                "Date",
+                "Month",
+                "Principal (INR)",
+                "Interest (INR)",
+                "Balance (INR)",
+              ],
+            ]
+          : [["Year", "Principal (INR)", "Interest (INR)", "Balance End (INR)"]];
+      const body = (tableMode === "monthly"
+        ? monthlyRows.map((r) => [
+            r.date,
+            String(r.month),
+            fmtIN(r.principal),
+            fmtIN(r.interest),
+            fmtIN(r.balance),
+          ])
+        : yearlyRows.map((y) => [
+            String(y.year),
+            fmtIN(y.principal),
+            fmtIN(y.interest),
+            fmtIN(y.balance),
+          ])) as any[];
 
       autoTable(doc, { head, body, startY: 80, styles: { fontSize: 9 } });
       doc.save(`amortization_${tableMode}.pdf`);
@@ -142,15 +208,16 @@ export default function Calculator() {
   };
 
   // ---------- Derived for drafts (so years/months box is consistent) ----------
-  const draftYears = dMode==="years" ? Number(dMonths) : round2(Number(dMonths)/12);
+  const draftYears =
+    dMode === "years" ? Number(dMonths) : round2(Number(dMonths) / 12);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
       <header className="mb-6">
         <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-sky-600 to-indigo-600 bg-clip-text text-transparent">
-        Personal Loan EMI Calculator
+          Personal Loan EMI Calculator
         </h1>
-        <p className="text-gray-700 mt-2">
+        <p className="text-slate-700 mt-2">
           Instant EMI, interest &amp; payoff visualization. Shareable URL.
         </p>
       </header>
@@ -158,7 +225,7 @@ export default function Calculator() {
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left: Controls */}
         <section>
-          <div className="rounded-2xl border border-blue-100 bg-white shadow-sm p-6">
+          <div className="rounded-2xl border border-indigo-200 bg-gradient-to-b from-indigo-50 to-slate-50 shadow-sm p-6">
             <div className="space-y-6 max-w-xl">
               {/* Amount row */}
               <FormRow>
@@ -166,14 +233,18 @@ export default function Calculator() {
                 <ValueBox>₹</ValueBox>
                 <BoxInput
                   value={dAmount}
-                  onChange={(v)=>setDAmount(Number(v))}
+                  onChange={(v) => setDAmount(Number(v))}
                   placeholder={String(DEFAULT_AMOUNT)}
                 />
               </FormRow>
               <SliderRow
-                min={50_000} max={10_000_000} step={10_000}
+                min={50_000}
+                max={10_000_000}
+                step={10_000}
                 value={dAmount}
-                onChange={(v:any)=> setDAmount(Number(typeof v === "number" ? v : v?.target?.value ?? v))}
+                onChange={(v: any) =>
+                  setDAmount(Number(typeof v === "number" ? v : v?.target?.value ?? v))
+                }
               />
 
               {/* Rate */}
@@ -181,40 +252,49 @@ export default function Calculator() {
                 <FormLabel>Rate of interest (p.a.)</FormLabel>
                 <BoxInput
                   value={dRate}
-                  onChange={(v)=>setDRate(Number(v))}
+                  onChange={(v) => setDRate(Number(v))}
                   width="w-28"
-                  step={0.1}
                   placeholder={String(DEFAULT_RATE)}
                 />
                 <ValueBox>%</ValueBox>
               </FormRow>
               <SliderRow
-                min={5} max={36} step={0.1}
+                min={5}
+                max={36}
+                step={0.1}
                 value={dRate}
-                onChange={(v:any)=> setDRate(Number(typeof v === "number" ? v : v?.target?.value ?? v))}
+                onChange={(v: any) =>
+                  setDRate(Number(typeof v === "number" ? v : v?.target?.value ?? v))
+                }
               />
 
               {/* Tenure toggle (default to Years) */}
               <div className="flex items-center justify-between">
                 <FormLabel>Loan tenure</FormLabel>
-                <TenureToggle mode={dMode} onMode={(m)=>setDMode(m)} />
+                <TenureToggle mode={dMode} onMode={(m) => setDMode(m)} />
               </div>
 
               {/* Tenure inputs */}
-              {dMode==="months" ? (
+              {dMode === "months" ? (
                 <>
                   <FormRow>
                     <FormLabel>Tenure (months)</FormLabel>
                     <BoxInput
                       value={dMonths}
-                      onChange={(v)=>setDMonths(Number(v))}
+                      onChange={(v) => setDMonths(Number(v))}
                       placeholder={String(DEFAULT_MONTHS)}
                     />
                   </FormRow>
                   <SliderRow
-                    min={6} max={360} step={1}
+                    min={6}
+                    max={360}
+                    step={1}
                     value={dMonths}
-                    onChange={(v:any)=> setDMonths(Number(typeof v === "number" ? v : v?.target?.value ?? v))}
+                    onChange={(v: any) =>
+                      setDMonths(
+                        Number(typeof v === "number" ? v : v?.target?.value ?? v)
+                      )
+                    }
                   />
                 </>
               ) : (
@@ -223,49 +303,62 @@ export default function Calculator() {
                     <FormLabel>Tenure (years)</FormLabel>
                     <BoxInput
                       value={draftYears}
-                      onChange={(v)=>setDMonths(Number(v)*12)}
-                      step={0.5}
+                      onChange={(v) => setDMonths(Number(v) * 12)}
                       placeholder={String(DEFAULT_YEARS)}
                     />
                   </FormRow>
                   <SliderRow
-                    min={0.5} max={30} step={0.5}
+                    min={0.5}
+                    max={30}
+                    step={0.5}
                     value={draftYears}
-                    onChange={(v:any)=> setDMonths(Number(typeof v === "number" ? v : v?.target?.value ?? v) * 12)}
+                    onChange={(v: any) =>
+                      setDMonths(
+                        Number(typeof v === "number" ? v : v?.target?.value ?? v) *
+                          12
+                      )
+                    }
                   />
                 </>
               )}
 
-              {/* Start date */}
+              {/* Start date (default today) */}
               <div className="space-y-1">
-                <label className="block text-sm font-semibold text-blue-700 mb-1">Start date:</label>
+                <label className="block text-sm font-semibold text-indigo-600 mb-1">
+                  Start date
+                </label>
                 <input
                   type="date"
                   value={dStart}
-                  onChange={(e)=>setDStart(e.target.value)}
-                  className="w-48 rounded-md border border-blue-300 bg-white px-3 py-2 mt-1 text-sm text-gray-900
-                             focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400"
+                  onChange={(e) => setDStart(e.target.value)}
+                  className="w-48 rounded-md border border-sky-400 bg-gradient-to-b from-white to-slate-50 shadow-sm font-semibold
+                             px-3 py-2 mt-1 text-sm text-gray-900 tracking-wide
+                             focus:outline-none focus:ring-2 focus:ring-sky-400 placeholder:text-gray-400"
                   placeholder={DEFAULT_START}
                 />
-                <p className="text-xs text-gray-500">Amortization starts from this date.</p>
+                <p className="text-xs text-slate-500">
+                  Amortization starts from this date.
+                </p>
               </div>
 
               {/* Calculate + Share */}
               <div className="flex items-center gap-3 pt-2">
                 <button
-                onClick={onCalculate}
-                className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white px-5 py-2 text-sm font-semibold shadow-md
-                            hover:from-sky-600 hover:to-indigo-600 active:scale-95 transition-all"
+                  onClick={onCalculate}
+                  className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white px-5 py-2 text-sm font-semibold shadow-md
+                             hover:from-sky-600 hover:to-indigo-600 active:scale-95 transition-all"
                 >
-                Calculate
+                  Calculate
                 </button>
                 <button
                   onClick={copyShareLink}
-                  className="rounded-full bg-blue-50 text-blue-700 px-4 py-2 text-sm border border-blue-200 hover:bg-blue-100"
+                  className="rounded-full bg-white text-indigo-600 px-4 py-2 text-sm border border-indigo-200 shadow-sm hover:bg-indigo-50"
                 >
                   Copy shareable link
                 </button>
-                {isPending && <span className="text-xs text-gray-400">Updating…</span>}
+                {isPending && (
+                  <span className="text-xs text-slate-400">Updating…</span>
+                )}
               </div>
             </div>
           </div>
@@ -281,33 +374,40 @@ export default function Calculator() {
 
         {/* Right: Donut + schedule */}
         <section className="flex flex-col items-center gap-6">
-          <div className="rounded-2xl border border-blue-100 bg-white shadow-sm p-6 w-full flex flex-col items-center">
+          <div className="rounded-2xl border border-indigo-200 bg-white shadow-sm p-6 w-full flex flex-col items-center">
             <Donut principal={amount} interest={out.totalInterest} />
-            <div className="mt-4 text-sm text-gray-700">
-              <span className="inline-block w-3 h-3 rounded-full bg-blue-100 border border-blue-200 mr-2" /> Principal
-              <span className="inline-block w-3 h-3 rounded-full bg-blue-600 ml-6 mr-2" /> Interest
+            <div className="mt-4 text-sm text-slate-700">
+              <span className="inline-block w-3 h-3 rounded-full bg-indigo-100 border border-indigo-200 mr-2" />{" "}
+              Principal
+              <span className="inline-block w-3 h-3 rounded-full bg-indigo-600 ml-6 mr-2" />{" "}
+              Interest
             </div>
           </div>
 
           {/* Schedule header with toggles + exports */}
           <div className="w-full">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-blue-700">
-                Amortization Schedule ({tableMode==="monthly"?"Monthly":"Yearly"})
+              <h2 className="text-lg font-semibold text-indigo-600">
+                Amortization Schedule ({tableMode === "monthly" ? "Monthly" : "Yearly"})
               </h2>
               <div className="flex items-center gap-2">
                 <ToggleSmall
-                  left="Monthly" right="Yearly"
-                  active={tableMode==="monthly"?"left":"right"}
-                  onLeft={()=>setTableMode("monthly")}
-                  onRight={()=>setTableMode("yearly")}
+                  left="Monthly"
+                  right="Yearly"
+                  active={tableMode === "monthly" ? "left" : "right"}
+                  onLeft={() => setTableMode("monthly")}
+                  onRight={() => setTableMode("yearly")}
                 />
-                <button onClick={exportCSV}
-                        className="ml-2 rounded-full bg-blue-50 text-blue-700 px-3 py-1 text-sm border border-blue-200 hover:bg-blue-100">
+                <button
+                  onClick={exportCSV}
+                  className="ml-2 rounded-full bg-white text-indigo-600 px-3 py-1 text-sm border border-indigo-200 shadow-sm hover:bg-indigo-50"
+                >
                   Download CSV
                 </button>
-                <button onClick={exportPDF}
-                        className="rounded-full bg-blue-600 text-white px-3 py-1 text-sm hover:bg-blue-700">
+                <button
+                  onClick={exportPDF}
+                  className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white px-3 py-1 text-sm shadow-md hover:from-sky-600 hover:to-indigo-600"
+                >
                   Download PDF
                 </button>
               </div>
@@ -315,23 +415,30 @@ export default function Calculator() {
 
             <div className="overflow-auto border rounded-2xl">
               <table className="min-w-full text-sm">
-                <thead className="bg-blue-50">
+                <thead className="bg-indigo-50">
                   <tr>
-                    {tableMode==="monthly" ? (
+                    {tableMode === "monthly" ? (
                       <>
-                        <Th>Date</Th><Th>Month</Th><Th>Principal</Th><Th>Interest</Th><Th>Balance</Th>
+                        <Th>Date</Th>
+                        <Th>Month</Th>
+                        <Th>Principal</Th>
+                        <Th>Interest</Th>
+                        <Th>Balance</Th>
                       </>
                     ) : (
                       <>
-                        <Th>Year</Th><Th>Principal</Th><Th>Interest</Th><Th>Balance End</Th>
+                        <Th>Year</Th>
+                        <Th>Principal</Th>
+                        <Th>Interest</Th>
+                        <Th>Balance End</Th>
                       </>
                     )}
                   </tr>
                 </thead>
                 <tbody>
-                  {tableMode==="monthly"
-                    ? monthlyRows.map((r)=>(
-                        <tr key={r.month} className="even:bg-blue-50">
+                  {tableMode === "monthly"
+                    ? monthlyRows.map((r) => (
+                        <tr key={r.month} className="even:bg-indigo-50">
                           <Td>{r.date}</Td>
                           <Td>{r.month}</Td>
                           <Td>₹ {Math.round(r.principal).toLocaleString("en-IN")}</Td>
@@ -339,8 +446,8 @@ export default function Calculator() {
                           <Td>₹ {Math.round(r.balance).toLocaleString("en-IN")}</Td>
                         </tr>
                       ))
-                    : yearlyRows.map((y)=>(
-                        <tr key={y.year} className="even:bg-blue-50">
+                    : yearlyRows.map((y) => (
+                        <tr key={y.year} className="even:bg-indigo-50">
                           <Td>{y.year}</Td>
                           <Td>₹ {Math.round(y.principal).toLocaleString("en-IN")}</Td>
                           <Td>₹ {Math.round(y.interest).toLocaleString("en-IN")}</Td>
@@ -363,19 +470,32 @@ function FormRow({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">{children}</div>;
 }
 function FormLabel({ children }: { children: React.ReactNode }) {
-  return <div className="text-sm font-semibold text-blue-700">{children}</div>;
+  return <div className="text-sm font-semibold text-indigo-600">{children}</div>;
 }
 function ValueBox({ children }: { children: React.ReactNode }) {
-  return <div className="px-3 py-2 rounded-md border border-blue-200 bg-blue-50 text-blue-700 text-sm">{children}</div>;
+  return (
+    <div className="px-3 py-2 rounded-md border border-indigo-200 bg-white text-indigo-600 text-sm shadow-sm">
+      {children}
+    </div>
+  );
 }
 function BoxInput({
-  value, onChange, width="w-36", step=1, placeholder
+  value,
+  onChange,
+  width = "w-36",
+  step = 1,
+  placeholder,
 }: {
-  value:number|string; onChange:(v:number)=>void; width?:string; step?:number; placeholder?:string
+  value: number | string;
+  onChange: (v: number) => void;
+  width?: string;
+  step?: number;
+  placeholder?: string;
 }) {
   const [tmp, setTmp] = useState(String(value));
-  const [isEmpty, setIsEmpty] = useState(false); // ✅ new state
+  const [isEmpty, setIsEmpty] = useState(false);
 
+  // keep input in sync with external value (slider/type)
   useEffect(() => {
     setTmp(String(value));
   }, [value]);
@@ -392,7 +512,7 @@ function BoxInput({
       onChange={(e) => {
         const s = e.target.value;
         setTmp(s);
-        if (s.trim() === "") setIsEmpty(true);        // ✅ mark empty
+        if (s.trim() === "") setIsEmpty(true);
         else {
           setIsEmpty(false);
           commitIfNumber(s);
@@ -418,11 +538,13 @@ function BoxInput({
         }
         if (e.key === "Escape") setTmp(String(value));
       }}
-      className={`${width} rounded-md border ${isEmpty ? "border-red-500 text-red-600" : "border-sky-400 text-gray-900"} 
-            bg-gradient-to-b from-white to-slate-50 shadow-sm font-semibold
-            px-3 py-2 text-right text-sm tracking-wide
-            focus:outline-none focus:ring-2 ${isEmpty ? "focus:ring-red-400" : "focus:ring-sky-400"}
-            placeholder:text-gray-400`}
+      className={`${width} rounded-md border ${
+        isEmpty ? "border-red-500 text-red-600" : "border-sky-400 text-gray-900"
+      } bg-gradient-to-b from-white to-slate-50 shadow-sm font-semibold
+                  px-3 py-2 text-right text-sm tracking-wide
+                  focus:outline-none focus:ring-2 ${
+                    isEmpty ? "focus:ring-red-400" : "focus:ring-sky-400"
+                  } placeholder:text-gray-400`}
       inputMode="decimal"
       placeholder={placeholder}
     />
@@ -430,32 +552,84 @@ function BoxInput({
 }
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="text-xs text-blue-700 font-medium">{label}</div>
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="text-xs text-indigo-600 font-medium">{label}</div>
       <div className="text-2xl font-semibold tabular-nums text-gray-900">{value}</div>
     </div>
   );
 }
-function TenureToggle({ mode, onMode }:{ mode:"months"|"years"; onMode:(m:"months"|"years")=>void }) {
+function TenureToggle({
+  mode,
+  onMode,
+}: {
+  mode: "months" | "years";
+  onMode: (m: "months" | "years") => void;
+}) {
   return (
-    <div className="inline-flex rounded-full border border-blue-200 bg-blue-50 p-1 text-sm">
-      <button className={`px-3 py-1 rounded-full ${mode==="months"?"bg-white shadow-sm text-blue-700 font-semibold":"text-blue-700"}`} onClick={()=>onMode("months")}>Months</button>
-      <button className={`px-3 py-1 rounded-full ${mode==="years" ?"bg-white shadow-sm text-blue-700 font-semibold":"text-blue-700"}`} onClick={()=>onMode("years")}>Years</button>
+    <div className="inline-flex rounded-full border border-indigo-200 bg-gradient-to-b from-indigo-50 to-slate-50 p-1 text-sm shadow-sm">
+      <button
+        className={`px-3 py-1 rounded-full ${
+          mode === "months"
+            ? "bg-white shadow-sm text-indigo-600 font-semibold"
+            : "text-indigo-600"
+        }`}
+        onClick={() => onMode("months")}
+      >
+        Months
+      </button>
+      <button
+        className={`px-3 py-1 rounded-full ${
+          mode === "years"
+            ? "bg-white shadow-sm text-indigo-600 font-semibold"
+            : "text-indigo-600"
+        }`}
+        onClick={() => onMode("years")}
+      >
+        Years
+      </button>
     </div>
   );
 }
-function ToggleSmall({ left, right, active, onLeft, onRight }:{
-  left:string; right:string; active:"left"|"right"; onLeft:()=>void; onRight:()=>void
+function ToggleSmall({
+  left,
+  right,
+  active,
+  onLeft,
+  onRight,
+}: {
+  left: string;
+  right: string;
+  active: "left" | "right";
+  onLeft: () => void;
+  onRight: () => void;
 }) {
   return (
-    <div className="inline-flex rounded-full border border-blue-200 bg-blue-50 p-1 text-sm">
-      <button className={`px-3 py-1 rounded-full ${active==="left" ? "bg-white shadow-sm text-blue-700 font-semibold":"text-blue-700"}`} onClick={onLeft}>{left}</button>
-      <button className={`px-3 py-1 rounded-full ${active==="right"? "bg-white shadow-sm text-blue-700 font-semibold":"text-blue-700"}`} onClick={onRight}>{right}</button>
+    <div className="inline-flex rounded-full border border-indigo-200 bg-gradient-to-b from-indigo-50 to-slate-50 p-1 text-sm shadow-sm">
+      <button
+        className={`px-3 py-1 rounded-full ${
+          active === "left"
+            ? "bg-white shadow-sm text-indigo-600 font-semibold"
+            : "text-indigo-600"
+        }`}
+        onClick={onLeft}
+      >
+        {left}
+      </button>
+      <button
+        className={`px-3 py-1 rounded-full ${
+          active === "right"
+            ? "bg-white shadow-sm text-indigo-600 font-semibold"
+            : "text-indigo-600"
+        }`}
+        onClick={onRight}
+      >
+        {right}
+      </button>
     </div>
   );
 }
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-4 py-2 text-left text-blue-700 font-medium">{children}</th>;
+  return <th className="px-4 py-2 text-left text-indigo-600 font-medium">{children}</th>;
 }
 function Td({ children }: { children: React.ReactNode }) {
   return <td className="px-4 py-2 text-gray-900 tabular-nums">{children}</td>;
@@ -463,39 +637,39 @@ function Td({ children }: { children: React.ReactNode }) {
 
 /* ---------------- utilities ---------------- */
 
-// "Today" (kept for reference)
 function todayISO() {
   const d = new Date();
-  const mm = String(d.getMonth()+1).padStart(2,"0");
-  const dd = String(d.getDate()).padStart(2,"0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
-
-function addMonthsISO(iso:string, add:number) {
-  const [y,m,d] = iso.split("-").map(Number);
-  const date = new Date(y, m-1+add, d);
-  const mm = String(date.getMonth()+1).padStart(2,"0");
-  const dd = String(date.getDate()).padStart(2,"0");
+function addMonthsISO(iso: string, add: number) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1 + add, d);
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${mm}-${dd}`;
 }
 function attachDates(
-  rows:{ month:number; principal:number; interest:number; balance:number }[],
-  startISO:string
-){
-  return rows.map(r=>({ ...r, date: addMonthsISO(startISO, r.month-1) }));
+  rows: { month: number; principal: number; interest: number; balance: number }[],
+  startISO: string
+) {
+  return rows.map((r) => ({ ...r, date: addMonthsISO(startISO, r.month - 1) }));
 }
-function groupByYear(rows:{ date:string; principal:number; interest:number; balance:number }[]) {
-  const map: Record<number,{principal:number;interest:number;balance:number}> = {};
+function groupByYear(
+  rows: { date: string; principal: number; interest: number; balance: number }[]
+) {
+  const map: Record<number, { principal: number; interest: number; balance: number }> = {};
   for (const r of rows) {
     const y = new Date(r.date).getFullYear();
-    if (!map[y]) map[y] = { principal:0, interest:0, balance:r.balance };
+    if (!map[y]) map[y] = { principal: 0, interest: 0, balance: r.balance };
     map[y].principal += r.principal;
-    map[y].interest  += r.interest;
-    map[y].balance    = r.balance;
+    map[y].interest += r.interest;
+    map[y].balance = r.balance;
   }
-  return Object.entries(map).map(([year,v])=>({ year:Number(year), ...v }));
+  return Object.entries(map).map(([year, v]) => ({ year: Number(year), ...v }));
 }
 // Plain Indian-grouped string (no ₹) to avoid PDF glyph issues
-function fmtIN(x:number) {
+function fmtIN(x: number) {
   return Math.round(x).toLocaleString("en-IN");
 }
