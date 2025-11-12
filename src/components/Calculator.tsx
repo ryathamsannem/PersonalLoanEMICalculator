@@ -373,11 +373,13 @@ function BoxInput({
   value:number|string; onChange:(v:number)=>void; width?:string; step?:number; placeholder?:string
 }) {
   const [tmp, setTmp] = useState(String(value));
+  const [isEmpty, setIsEmpty] = useState(false); // ✅ new state
 
-  // keep input in sync with external value (slider/type)
-  useEffect(()=>{ setTmp(String(value)); }, [value]);
+  useEffect(() => {
+    setTmp(String(value));
+  }, [value]);
 
-  const commitIfNumber = (s:string) => {
+  const commitIfNumber = (s: string) => {
     const n = Number(s);
     if (!isNaN(n)) onChange(n);
   };
@@ -386,25 +388,39 @@ function BoxInput({
     <input
       type="text"
       value={tmp}
-      onChange={(e)=>{
+      onChange={(e) => {
         const s = e.target.value;
         setTmp(s);
-        if (s.trim() !== "") commitIfNumber(s);
+        if (s.trim() === "") setIsEmpty(true);        // ✅ mark empty
+        else {
+          setIsEmpty(false);
+          commitIfNumber(s);
+        }
       }}
-      onBlur={()=>{
-        if (tmp.trim() === "") { setTmp(String(value)); return; }
+      onBlur={() => {
+        if (tmp.trim() === "") {
+          setIsEmpty(true);
+          setTmp(String(value));
+          return;
+        }
         commitIfNumber(tmp);
       }}
-      onKeyDown={(e)=>{
+      onKeyDown={(e) => {
         if (e.key === "Enter") {
-          if (tmp.trim() === "") { setTmp(String(value)); return; }
+          if (tmp.trim() === "") {
+            setIsEmpty(true);
+            setTmp(String(value));
+            return;
+          }
           commitIfNumber(tmp);
           (e.target as HTMLInputElement).blur();
         }
         if (e.key === "Escape") setTmp(String(value));
       }}
-      className={`${width} rounded-md border border-blue-300 bg-white px-3 py-2 text-right text-sm text-gray-900
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400`}
+      className={`${width} rounded-md border ${isEmpty ? "border-red-400 text-red-500" : "border-blue-300 text-gray-900"} 
+                  bg-white px-3 py-2 text-right text-sm
+                  focus:outline-none focus:ring-2 ${isEmpty ? "focus:ring-red-400" : "focus:ring-blue-500"} 
+                  placeholder:text-gray-400`}
       inputMode="decimal"
       placeholder={placeholder}
     />
