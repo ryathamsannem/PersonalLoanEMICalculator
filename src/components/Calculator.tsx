@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   useTransition,
+  useEffect,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SliderRow from "@/components/SliderRow";
@@ -158,7 +159,11 @@ export default function Calculator() {
                 <ValueBox>₹</ValueBox>
                 <BoxInput value={dAmount} onChange={(v)=>setDAmount(Number(v))} />
               </FormRow>
-              <SliderRow min={50_000} max={10_000_000} step={10_000} value={dAmount} onChange={setDAmount} />
+              <SliderRow
+                min={50_000} max={10_000_000} step={10_000}
+                value={dAmount}
+                onChange={(v:any)=> setDAmount(Number(typeof v === "number" ? v : v?.target?.value ?? v))}
+                />
 
               {/* Rate */}
               <FormRow>
@@ -166,7 +171,11 @@ export default function Calculator() {
                 <BoxInput value={dRate} onChange={(v)=>setDRate(Number(v))} width="w-28" step={0.1} />
                 <ValueBox>%</ValueBox>
               </FormRow>
-              <SliderRow min={5} max={36} step={0.1} value={dRate} onChange={setDRate} />
+              <SliderRow
+                min={5} max={36} step={0.1}
+                value={dRate}
+                onChange={(v:any)=> setDRate(Number(typeof v === "number" ? v : v?.target?.value ?? v))}
+                />
 
               {/* Tenure toggle */}
               <div className="flex items-center justify-between">
@@ -181,7 +190,11 @@ export default function Calculator() {
                     <FormLabel>Tenure (months)</FormLabel>
                     <BoxInput value={dMonths} onChange={(v)=>setDMonths(Number(v))} />
                   </FormRow>
-                  <SliderRow min={6} max={360} step={1} value={dMonths} onChange={setDMonths} />
+                  <SliderRow
+                    min={6} max={360} step={1}
+                    value={dMonths}
+                    onChange={(v:any)=> setDMonths(Number(typeof v === "number" ? v : v?.target?.value ?? v))}
+                    />
                 </>
               ) : (
                 <>
@@ -189,7 +202,11 @@ export default function Calculator() {
                     <FormLabel>Tenure (years)</FormLabel>
                     <BoxInput value={draftYears} onChange={(v)=>setDMonths(Number(v)*12)} step={0.5} />
                   </FormRow>
-                  <SliderRow min={0.5} max={30} step={0.5} value={draftYears} onChange={(v)=>setDMonths(Number(v)*12)} />
+                  <SliderRow
+                    min={0.5} max={30} step={0.5}
+                    value={draftYears}
+                    onChange={(v:any)=> setDMonths(Number(typeof v === "number" ? v : v?.target?.value ?? v) * 12)}
+                    />
                 </>
               )}
 
@@ -327,14 +344,39 @@ function BoxInput({
   value, onChange, width="w-36", step=1
 }: { value:number|string; onChange:(v:number)=>void; width?:string; step?:number }) {
   const [tmp, setTmp] = useState(String(value));
+
+  // ✅ keep local input in sync when parent value changes (e.g., slider drag)
+  useEffect(() => {
+    setTmp(String(value));
+  }, [value]);
+
+  const commitIfNumber = (s: string) => {
+    const n = Number(s);
+    if (!isNaN(n)) onChange(n);
+  };
+
   return (
     <input
       type="text"
       value={tmp}
-      onChange={(e)=>setTmp(e.target.value)}
+      onChange={(e)=>{
+        const s = e.target.value;
+        setTmp(s);
+        // ✅ live-commit to parent when it's a valid number so the slider moves immediately
+        if (s.trim() !== "") commitIfNumber(s);
+      }}
       onBlur={()=>{
-        const n = Number(tmp);
-        if (!isNaN(n)) onChange(n); else setTmp(String(value));
+        // final guard on blur
+        if (tmp.trim() === "") { setTmp(String(value)); return; }
+        commitIfNumber(tmp);
+      }}
+      onKeyDown={(e)=>{
+        if (e.key === "Enter") {
+          if (tmp.trim() === "") { setTmp(String(value)); return; }
+          commitIfNumber(tmp);
+          (e.target as HTMLInputElement).blur();
+        }
+        if (e.key === "Escape") setTmp(String(value));
       }}
       className={`${width} rounded-md border border-blue-300 bg-white px-3 py-2 text-right text-sm text-gray-900
                   focus:outline-none focus:ring-2 focus:ring-blue-500`}
