@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
   useTransition,
-  useEffect,
+  useEffect, // for BoxInput sync
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SliderRow from "@/components/SliderRow";
@@ -21,12 +21,24 @@ export default function Calculator() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
+  // ---------- DEFAULTS ----------
+  const DEFAULT_AMOUNT = 500_000;
+  const DEFAULT_RATE = 9.99;
+  const DEFAULT_YEARS = 5;
+  const DEFAULT_MONTHS = DEFAULT_YEARS * 12;
+  const DEFAULT_START = monthSeventhISO(); // current year/month, 07th
+
   // ---------- committed values (used for calculation & URL) ----------
-  const [amount, setAmount]   = useState<number>(Number(params.get("amount")  ?? 50_000));
-  const [rate, setRate]       = useState<number>(Number(params.get("rate")    ?? 10));
-  const [months, setMonths]   = useState<number>(Number(params.get("months")  ?? 60));
-  const [modeTenure, setModeTenure] = useState<"months"|"years">(params.get("mode")==="years"?"years":"months");
-  const [startDate, setStartDate]   = useState<string>(params.get("start") ?? todayISO());
+  const [amount, setAmount]   = useState<number>(Number(params.get("amount")  ?? DEFAULT_AMOUNT));
+  const [rate, setRate]       = useState<number>(Number(params.get("rate")    ?? DEFAULT_RATE));
+  const [months, setMonths]   = useState<number>(Number(params.get("months")  ?? DEFAULT_MONTHS));
+
+  // default to "years" unless the URL explicitly says months
+  const [modeTenure, setModeTenure] =
+    useState<"months"|"years">(params.get("mode")==="months" ? "months" : "years");
+
+  const [startDate, setStartDate]   =
+    useState<string>(params.get("start") ?? DEFAULT_START);
 
   // ---------- draft values (edited live; committed on "Calculate") ----------
   const [dAmount, setDAmount] = useState(amount);
@@ -34,10 +46,6 @@ export default function Calculator() {
   const [dMonths, setDMonths] = useState(months);
   const [dMode, setDMode]     = useState<"months"|"years">(modeTenure);
   const [dStart, setDStart]   = useState<string>(startDate);
-
-  // When you first land on a URL with params, make drafts match
-  // (keeps sliders/boxes in sync with committed values on refresh)
-  // not strictly needed each render; we set once via initializers.
 
   // ---------- URL sync (only when user presses Calculate) ----------
   const debRef = useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -100,11 +108,10 @@ export default function Calculator() {
       const autoTable = (await import("jspdf-autotable")).default;
       const doc = new jsPDF({ unit:"pt", format:"a4" });
 
-      doc.setFont("helvetica",""); // safest core font
+      doc.setFont("helvetica","");
       doc.setFontSize(14);
       doc.text("Personal Loan Amortization", 40, 40);
       doc.setFontSize(11);
-      // NOTE: Use plain numbers (no ₹) to avoid unsupported glyphs rendering as weird prefixes.
       doc.text(
         `Amount: ${fmtIN(amount)} INR  |  Rate: ${rate}%  |  Tenure: ${months} months  |  Start: ${startDate}`,
         40, 60
@@ -153,31 +160,41 @@ export default function Calculator() {
         <section>
           <div className="rounded-2xl border border-blue-100 bg-white shadow-sm p-6">
             <div className="space-y-6 max-w-xl">
-              {/* Amount row (aligned like Groww) */}
+              {/* Amount row */}
               <FormRow>
                 <FormLabel>Loan amount</FormLabel>
                 <ValueBox>₹</ValueBox>
-                <BoxInput value={dAmount} onChange={(v)=>setDAmount(Number(v))} />
+                <BoxInput
+                  value={dAmount}
+                  onChange={(v)=>setDAmount(Number(v))}
+                  placeholder={String(DEFAULT_AMOUNT)}
+                />
               </FormRow>
               <SliderRow
                 min={50_000} max={10_000_000} step={10_000}
                 value={dAmount}
                 onChange={(v:any)=> setDAmount(Number(typeof v === "number" ? v : v?.target?.value ?? v))}
-                />
+              />
 
               {/* Rate */}
               <FormRow>
                 <FormLabel>Rate of interest (p.a.)</FormLabel>
-                <BoxInput value={dRate} onChange={(v)=>setDRate(Number(v))} width="w-28" step={0.1} />
+                <BoxInput
+                  value={dRate}
+                  onChange={(v)=>setDRate(Number(v))}
+                  width="w-28"
+                  step={0.1}
+                  placeholder={String(DEFAULT_RATE)}
+                />
                 <ValueBox>%</ValueBox>
               </FormRow>
               <SliderRow
                 min={5} max={36} step={0.1}
                 value={dRate}
                 onChange={(v:any)=> setDRate(Number(typeof v === "number" ? v : v?.target?.value ?? v))}
-                />
+              />
 
-              {/* Tenure toggle */}
+              {/* Tenure toggle (default to Years) */}
               <div className="flex items-center justify-between">
                 <FormLabel>Loan tenure</FormLabel>
                 <TenureToggle mode={dMode} onMode={(m)=>setDMode(m)} />
@@ -188,25 +205,34 @@ export default function Calculator() {
                 <>
                   <FormRow>
                     <FormLabel>Tenure (months)</FormLabel>
-                    <BoxInput value={dMonths} onChange={(v)=>setDMonths(Number(v))} />
+                    <BoxInput
+                      value={dMonths}
+                      onChange={(v)=>setDMonths(Number(v))}
+                      placeholder={String(DEFAULT_MONTHS)}
+                    />
                   </FormRow>
                   <SliderRow
                     min={6} max={360} step={1}
                     value={dMonths}
                     onChange={(v:any)=> setDMonths(Number(typeof v === "number" ? v : v?.target?.value ?? v))}
-                    />
+                  />
                 </>
               ) : (
                 <>
                   <FormRow>
                     <FormLabel>Tenure (years)</FormLabel>
-                    <BoxInput value={draftYears} onChange={(v)=>setDMonths(Number(v)*12)} step={0.5} />
+                    <BoxInput
+                      value={draftYears}
+                      onChange={(v)=>setDMonths(Number(v)*12)}
+                      step={0.5}
+                      placeholder={String(DEFAULT_YEARS)}
+                    />
                   </FormRow>
                   <SliderRow
                     min={0.5} max={30} step={0.5}
                     value={draftYears}
                     onChange={(v:any)=> setDMonths(Number(typeof v === "number" ? v : v?.target?.value ?? v) * 12)}
-                    />
+                  />
                 </>
               )}
 
@@ -218,7 +244,8 @@ export default function Calculator() {
                   value={dStart}
                   onChange={(e)=>setDStart(e.target.value)}
                   className="w-48 rounded-md border border-blue-300 bg-white px-3 py-2 mt-1 text-sm text-gray-900
-                             focus:outline-none focus:ring-2 focus:ring-blue-500"
+                             focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400"
+                  placeholder={DEFAULT_START}
                 />
                 <p className="text-xs text-gray-500">Amortization starts from this date.</p>
               </div>
@@ -341,16 +368,16 @@ function ValueBox({ children }: { children: React.ReactNode }) {
   return <div className="px-3 py-2 rounded-md border border-blue-200 bg-blue-50 text-blue-700 text-sm">{children}</div>;
 }
 function BoxInput({
-  value, onChange, width="w-36", step=1
-}: { value:number|string; onChange:(v:number)=>void; width?:string; step?:number }) {
+  value, onChange, width="w-36", step=1, placeholder
+}: {
+  value:number|string; onChange:(v:number)=>void; width?:string; step?:number; placeholder?:string
+}) {
   const [tmp, setTmp] = useState(String(value));
 
-  // ✅ keep local input in sync when parent value changes (e.g., slider drag)
-  useEffect(() => {
-    setTmp(String(value));
-  }, [value]);
+  // keep input in sync with external value (slider/type)
+  useEffect(()=>{ setTmp(String(value)); }, [value]);
 
-  const commitIfNumber = (s: string) => {
+  const commitIfNumber = (s:string) => {
     const n = Number(s);
     if (!isNaN(n)) onChange(n);
   };
@@ -362,11 +389,9 @@ function BoxInput({
       onChange={(e)=>{
         const s = e.target.value;
         setTmp(s);
-        // ✅ live-commit to parent when it's a valid number so the slider moves immediately
         if (s.trim() !== "") commitIfNumber(s);
       }}
       onBlur={()=>{
-        // final guard on blur
         if (tmp.trim() === "") { setTmp(String(value)); return; }
         commitIfNumber(tmp);
       }}
@@ -379,8 +404,9 @@ function BoxInput({
         if (e.key === "Escape") setTmp(String(value));
       }}
       className={`${width} rounded-md border border-blue-300 bg-white px-3 py-2 text-right text-sm text-gray-900
-                  focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400`}
       inputMode="decimal"
+      placeholder={placeholder}
     />
   );
 }
@@ -419,12 +445,21 @@ function Td({ children }: { children: React.ReactNode }) {
 
 /* ---------------- utilities ---------------- */
 
+// "Today" (kept for reference)
 function todayISO() {
   const d = new Date();
   const mm = String(d.getMonth()+1).padStart(2,"0");
   const dd = String(d.getDate()).padStart(2,"0");
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
+
+// New: current year & month, day = 07
+function monthSeventhISO() {
+  const d = new Date();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  return `${d.getFullYear()}-${mm}-07`;
+}
+
 function addMonthsISO(iso:string, add:number) {
   const [y,m,d] = iso.split("-").map(Number);
   const date = new Date(y, m-1+add, d);
