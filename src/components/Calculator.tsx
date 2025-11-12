@@ -26,7 +26,7 @@ export default function Calculator() {
   const DEFAULT_RATE = 9.99;
   const DEFAULT_YEARS = 5;
   const DEFAULT_MONTHS = DEFAULT_YEARS * 12;
-  const DEFAULT_START = monthSeventhISO(); // current year/month, 07th
+  const DEFAULT_START = todayISO(); // current year/month, 07th
 
   // ---------- committed values (used for calculation & URL) ----------
   const [amount, setAmount]   = useState<number>(Number(params.get("amount")  ?? DEFAULT_AMOUNT));
@@ -147,8 +147,8 @@ export default function Calculator() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
       <header className="mb-6">
-        <h1 className="text-4xl font-extrabold tracking-tight text-blue-700">
-          Personal Loan EMI Calculator
+        <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-sky-600 to-indigo-600 bg-clip-text text-transparent">
+        Personal Loan EMI Calculator
         </h1>
         <p className="text-gray-700 mt-2">
           Instant EMI, interest &amp; payoff visualization. Shareable URL.
@@ -238,7 +238,7 @@ export default function Calculator() {
 
               {/* Start date */}
               <div className="space-y-1">
-                <label className="block text-sm font-semibold text-blue-700 mb-1">Start date</label>
+                <label className="block text-sm font-semibold text-blue-700 mb-1">Start date:</label>
                 <input
                   type="date"
                   value={dStart}
@@ -253,10 +253,11 @@ export default function Calculator() {
               {/* Calculate + Share */}
               <div className="flex items-center gap-3 pt-2">
                 <button
-                  onClick={onCalculate}
-                  className="rounded-full bg-blue-600 text-white px-5 py-2 text-sm font-semibold hover:bg-blue-700"
+                onClick={onCalculate}
+                className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white px-5 py-2 text-sm font-semibold shadow-md
+                            hover:from-sky-600 hover:to-indigo-600 active:scale-95 transition-all"
                 >
-                  Calculate
+                Calculate
                 </button>
                 <button
                   onClick={copyShareLink}
@@ -417,10 +418,11 @@ function BoxInput({
         }
         if (e.key === "Escape") setTmp(String(value));
       }}
-      className={`${width} rounded-md border ${isEmpty ? "border-red-400 text-red-500" : "border-blue-300 text-gray-900"} 
-                  bg-white px-3 py-2 text-right text-sm
-                  focus:outline-none focus:ring-2 ${isEmpty ? "focus:ring-red-400" : "focus:ring-blue-500"} 
-                  placeholder:text-gray-400`}
+      className={`${width} rounded-md border ${isEmpty ? "border-red-500 text-red-600" : "border-sky-400 text-gray-900"} 
+            bg-gradient-to-b from-white to-slate-50 shadow-sm font-semibold
+            px-3 py-2 text-right text-sm tracking-wide
+            focus:outline-none focus:ring-2 ${isEmpty ? "focus:ring-red-400" : "focus:ring-sky-400"}
+            placeholder:text-gray-400`}
       inputMode="decimal"
       placeholder={placeholder}
     />
@@ -467,13 +469,6 @@ function todayISO() {
   const mm = String(d.getMonth()+1).padStart(2,"0");
   const dd = String(d.getDate()).padStart(2,"0");
   return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
-// New: current year & month, day = 07
-function monthSeventhISO() {
-  const d = new Date();
-  const mm = String(d.getMonth()+1).padStart(2,"0");
-  return `${d.getFullYear()}-${mm}-07`;
 }
 
 function addMonthsISO(iso:string, add:number) {
