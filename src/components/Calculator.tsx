@@ -13,32 +13,27 @@ import Donut from "@/components/Donut";
 import { computeEmi, inr, round2 } from "@/lib/emi";
 
 /* -----------------------------------------------------------
- * Calculator with: Calculate button, Share Link, CSV/PDF export
+ *  Refined UI: thin fonts, bold accents, blue palette
  * -------------------------------------------------------- */
 export default function Calculator() {
   const params = useSearchParams();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // ---------- committed values (used for calculation & URL) ----------
+  // committed (source of truth)
   const [amount, setAmount]   = useState<number>(Number(params.get("amount")  ?? 50_000));
   const [rate, setRate]       = useState<number>(Number(params.get("rate")    ?? 10));
   const [months, setMonths]   = useState<number>(Number(params.get("months")  ?? 60));
   const [modeTenure, setModeTenure] = useState<"months"|"years">(params.get("mode")==="years"?"years":"months");
   const [startDate, setStartDate]   = useState<string>(params.get("start") ?? todayISO());
 
-  // ---------- draft values (edited live; committed on "Calculate") ----------
+  // drafts (edited live)
   const [dAmount, setDAmount] = useState(amount);
   const [dRate, setDRate]     = useState(rate);
   const [dMonths, setDMonths] = useState(months);
   const [dMode, setDMode]     = useState<"months"|"years">(modeTenure);
   const [dStart, setDStart]   = useState<string>(startDate);
 
-  // When you first land on a URL with params, make drafts match
-  // (keeps sliders/boxes in sync with committed values on refresh)
-  // not strictly needed each render; we set once via initializers.
-
-  // ---------- URL sync (only when user presses Calculate) ----------
   const debRef = useRef<ReturnType<typeof setTimeout>|null>(null);
   const pushUrl = useCallback((v: {
     amount:number; rate:number; months:number; mode:"months"|"years"; start:string
@@ -53,10 +48,9 @@ export default function Calculator() {
     if (debRef.current) clearTimeout(debRef.current);
     debRef.current = setTimeout(()=>{
       startTransition(()=>router.replace(`/?${sp.toString()}`));
-    }, 150);
+    }, 120);
   },[params, router, startTransition]);
 
-  // ---------- Calculate: commit drafts -> compute + update URL ----------
   const onCalculate = () => {
     const commitMonths = dMode==="years" ? Math.round(Number(dMonths)*12) : Math.round(Number(dMonths));
     setAmount(Number(dAmount));
@@ -67,17 +61,17 @@ export default function Calculator() {
     pushUrl({ amount:Number(dAmount), rate:Number(dRate), months:commitMonths, mode:dMode, start:dStart });
   };
 
-  // ---------- EMI computation for committed values ----------
+  // compute on committed values
   const out = useMemo(()=>computeEmi({
     principal: amount, annualRatePct: rate, tenureMonths: months
   }), [amount, rate, months]);
 
-  // ---------- table data (full schedule) ----------
+  // amortization data
   const monthlyRows = useMemo(()=>attachDates(out.breakdown, startDate), [out.breakdown, startDate]);
   const yearlyRows  = useMemo(()=>groupByYear(monthlyRows), [monthlyRows]);
   const [tableMode, setTableMode] = useState<"monthly"|"yearly">("monthly");
 
-  // ---------- exporters ----------
+  // exports + share
   const exportCSV = () => {
     const head = tableMode==="monthly"
       ? ["Date","Month","Principal","Interest","Balance"]
@@ -99,11 +93,10 @@ export default function Calculator() {
       const autoTable = (await import("jspdf-autotable")).default;
       const doc = new jsPDF({ unit:"pt", format:"a4" });
 
-      doc.setFont("helvetica",""); // safest core font
+      doc.setFont("helvetica", "");
       doc.setFontSize(14);
       doc.text("Personal Loan Amortization", 40, 40);
       doc.setFontSize(11);
-      // NOTE: Use plain numbers (no ₹) to avoid unsupported glyphs rendering as weird prefixes.
       doc.text(
         `Amount: ${fmtIN(amount)} INR  |  Rate: ${rate}%  |  Tenure: ${months} months  |  Start: ${startDate}`,
         40, 60
@@ -125,34 +118,30 @@ export default function Calculator() {
   };
 
   const copyShareLink = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      alert("Link copied! Share it with anyone.");
-    } catch {
-      alert("Copy failed. You can manually copy the URL from the address bar.");
-    }
+    try { await navigator.clipboard.writeText(window.location.href); alert("Link copied!"); }
+    catch { alert("Copy failed. Please copy from the address bar."); }
   };
 
-  // ---------- Derived for drafts (so years/months box is consistent) ----------
+  // draft-years display
   const draftYears = dMode==="years" ? Number(dMonths) : round2(Number(dMonths)/12);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
       <header className="mb-6">
-        <h1 className="text-4xl font-extrabold tracking-tight text-blue-700">
+        <h1 className="text-4xl font-bold text-brand-blue tracking-tight leading-tight">
           Personal Loan EMI Calculator
         </h1>
-        <p className="text-gray-700 mt-2">
-          Instant EMI, interest &amp; payoff visualization. Shareable URL.
+        <p className="text-brand-gray font-light mt-1">
+          Instant EMI, interest & payoff visualization — share your configuration with a link.
         </p>
       </header>
 
       <div className="grid lg:grid-cols-2 gap-8">
-        {/* Left: Controls */}
+        {/* LEFT — controls */}
         <section>
-          <div className="rounded-2xl border border-blue-100 bg-white shadow-sm p-6">
+          <div className="rounded-2xl border border-blue-100 bg-white shadow-sm hover:shadow-md transition-all duration-300 p-6">
             <div className="space-y-6 max-w-xl">
-              {/* Amount row (aligned like Groww) */}
+              {/* Amount */}
               <FormRow>
                 <FormLabel>Loan amount</FormLabel>
                 <ValueBox>₹</ValueBox>
@@ -195,32 +184,33 @@ export default function Calculator() {
 
               {/* Start date */}
               <div className="space-y-1">
-                <label className="block text-sm font-semibold text-blue-700 mb-1">Start date</label>
+                <label className="block text-sm font-medium text-brand-blue mb-1">Start date</label>
                 <input
                   type="date"
                   value={dStart}
                   onChange={(e)=>setDStart(e.target.value)}
-                  className="w-48 rounded-md border border-blue-300 bg-white px-3 py-2 mt-1 text-sm text-gray-900
-                             focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-48 rounded-lg border border-blue-300 bg-white px-3 py-2 mt-1 text-sm text-slate-900
+                             focus:outline-none focus:ring-2 focus:ring-brand-blue/70"
                 />
-                <p className="text-xs text-gray-500">Amortization starts from this date.</p>
+                <p className="text-xs text-brand-gray">Amortization starts from this date.</p>
               </div>
 
-              {/* Calculate + Share */}
+              {/* Actions */}
               <div className="flex items-center gap-3 pt-2">
                 <button
                   onClick={onCalculate}
-                  className="rounded-full bg-blue-600 text-white px-5 py-2 text-sm font-semibold hover:bg-blue-700"
+                  className="rounded-full bg-gradient-to-r from-brand-blue to-brand-light text-white px-5 py-2 text-sm font-medium
+                             shadow-sm hover:shadow-md transition-all"
                 >
                   Calculate
                 </button>
                 <button
                   onClick={copyShareLink}
-                  className="rounded-full bg-blue-50 text-blue-700 px-4 py-2 text-sm border border-blue-200 hover:bg-blue-100"
+                  className="rounded-full bg-blue-50 text-brand-blue px-4 py-2 text-sm border border-blue-200 hover:bg-blue-100 transition"
                 >
                   Copy shareable link
                 </button>
-                {isPending && <span className="text-xs text-gray-400">Updating…</span>}
+                {isPending && <span className="text-xs text-slate-400">Updating…</span>}
               </div>
             </div>
           </div>
@@ -234,20 +224,20 @@ export default function Calculator() {
           </div>
         </section>
 
-        {/* Right: Donut + schedule */}
+        {/* RIGHT — donut + table */}
         <section className="flex flex-col items-center gap-6">
-          <div className="rounded-2xl border border-blue-100 bg-white shadow-sm p-6 w-full flex flex-col items-center">
+          <div className="rounded-2xl border border-blue-100 bg-white shadow-sm hover:shadow-md transition p-6 w-full flex flex-col items-center">
             <Donut principal={amount} interest={out.totalInterest} />
-            <div className="mt-4 text-sm text-gray-700">
+            <div className="mt-4 text-sm text-brand-gray">
               <span className="inline-block w-3 h-3 rounded-full bg-blue-100 border border-blue-200 mr-2" /> Principal
-              <span className="inline-block w-3 h-3 rounded-full bg-blue-600 ml-6 mr-2" /> Interest
+              <span className="inline-block w-3 h-3 rounded-full bg-brand-blue ml-6 mr-2" /> Interest
             </div>
           </div>
 
-          {/* Schedule header with toggles + exports */}
+          {/* Table + exports */}
           <div className="w-full">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-blue-700">
+              <h2 className="text-lg font-semibold text-brand-blue">
                 Amortization Schedule ({tableMode==="monthly"?"Monthly":"Yearly"})
               </h2>
               <div className="flex items-center gap-2">
@@ -258,11 +248,11 @@ export default function Calculator() {
                   onRight={()=>setTableMode("yearly")}
                 />
                 <button onClick={exportCSV}
-                        className="ml-2 rounded-full bg-blue-50 text-blue-700 px-3 py-1 text-sm border border-blue-200 hover:bg-blue-100">
+                        className="ml-2 rounded-full bg-blue-50 text-brand-blue px-3 py-1 text-sm border border-blue-200 hover:bg-blue-100 transition">
                   Download CSV
                 </button>
                 <button onClick={exportPDF}
-                        className="rounded-full bg-blue-600 text-white px-3 py-1 text-sm hover:bg-blue-700">
+                        className="rounded-full bg-brand-blue text-white px-3 py-1 text-sm hover:brightness-110 transition">
                   Download PDF
                 </button>
               </div>
@@ -312,16 +302,16 @@ export default function Calculator() {
   );
 }
 
-/* ---------------- small UI building blocks ---------------- */
+/* ---------------- presentational helpers ---------------- */
 
 function FormRow({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">{children}</div>;
 }
 function FormLabel({ children }: { children: React.ReactNode }) {
-  return <div className="text-sm font-semibold text-blue-700">{children}</div>;
+  return <div className="text-sm font-medium text-brand-blue">{children}</div>;
 }
 function ValueBox({ children }: { children: React.ReactNode }) {
-  return <div className="px-3 py-2 rounded-md border border-blue-200 bg-blue-50 text-blue-700 text-sm">{children}</div>;
+  return <div className="px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-brand-blue text-sm">{children}</div>;
 }
 function BoxInput({
   value, onChange, width="w-36", step=1
@@ -336,25 +326,25 @@ function BoxInput({
         const n = Number(tmp);
         if (!isNaN(n)) onChange(n); else setTmp(String(value));
       }}
-      className={`${width} rounded-md border border-blue-300 bg-white px-3 py-2 text-right text-sm text-gray-900
-                  focus:outline-none focus:ring-2 focus:ring-blue-500`}
+      className={`${width} rounded-lg border border-blue-300 bg-white px-3 py-2 text-right text-sm text-slate-900
+                  focus:outline-none focus:ring-2 focus:ring-brand-blue/70 transition`}
       inputMode="decimal"
     />
   );
 }
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="text-xs text-blue-700 font-medium">{label}</div>
-      <div className="text-2xl font-semibold tabular-nums text-gray-900">{value}</div>
+    <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm hover:shadow-md transition">
+      <div className="text-xs text-brand-blue font-medium">{label}</div>
+      <div className="text-2xl font-bold tabular-nums text-slate-900">{value}</div>
     </div>
   );
 }
 function TenureToggle({ mode, onMode }:{ mode:"months"|"years"; onMode:(m:"months"|"years")=>void }) {
   return (
     <div className="inline-flex rounded-full border border-blue-200 bg-blue-50 p-1 text-sm">
-      <button className={`px-3 py-1 rounded-full ${mode==="months"?"bg-white shadow-sm text-blue-700 font-semibold":"text-blue-700"}`} onClick={()=>onMode("months")}>Months</button>
-      <button className={`px-3 py-1 rounded-full ${mode==="years" ?"bg-white shadow-sm text-blue-700 font-semibold":"text-blue-700"}`} onClick={()=>onMode("years")}>Years</button>
+      <button className={`px-3 py-1 rounded-full ${mode==="months"?"bg-white shadow-sm text-brand-blue font-medium":"text-brand-blue"}`} onClick={()=>onMode("months")}>Months</button>
+      <button className={`px-3 py-1 rounded-full ${mode==="years" ?"bg-white shadow-sm text-brand-blue font-medium":"text-brand-blue"}`} onClick={()=>onMode("years")}>Years</button>
     </div>
   );
 }
@@ -363,16 +353,16 @@ function ToggleSmall({ left, right, active, onLeft, onRight }:{
 }) {
   return (
     <div className="inline-flex rounded-full border border-blue-200 bg-blue-50 p-1 text-sm">
-      <button className={`px-3 py-1 rounded-full ${active==="left" ? "bg-white shadow-sm text-blue-700 font-semibold":"text-blue-700"}`} onClick={onLeft}>{left}</button>
-      <button className={`px-3 py-1 rounded-full ${active==="right"? "bg-white shadow-sm text-blue-700 font-semibold":"text-blue-700"}`} onClick={onRight}>{right}</button>
+      <button className={`px-3 py-1 rounded-full ${active==="left" ? "bg-white shadow-sm text-brand-blue font-medium":"text-brand-blue"}`} onClick={onLeft}>{left}</button>
+      <button className={`px-3 py-1 rounded-full ${active==="right"? "bg-white shadow-sm text-brand-blue font-medium":"text-brand-blue"}`} onClick={onRight}>{right}</button>
     </div>
   );
 }
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-4 py-2 text-left text-blue-700 font-medium">{children}</th>;
+  return <th className="px-4 py-2 text-left text-brand-blue font-medium">{children}</th>;
 }
 function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-4 py-2 text-gray-900 tabular-nums">{children}</td>;
+  return <td className="px-4 py-2 text-slate-900 tabular-nums">{children}</td>;
 }
 
 /* ---------------- utilities ---------------- */
@@ -407,7 +397,7 @@ function groupByYear(rows:{ date:string; principal:number; interest:number; bala
   }
   return Object.entries(map).map(([year,v])=>({ year:Number(year), ...v }));
 }
-// Plain Indian-grouped string (no ₹) to avoid PDF glyph issues
+// plain Indian grouping (no ₹) for PDF
 function fmtIN(x:number) {
   return Math.round(x).toLocaleString("en-IN");
 }
